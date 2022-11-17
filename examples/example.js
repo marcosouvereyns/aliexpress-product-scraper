@@ -1,6 +1,7 @@
 const scrape = require('./../index.js');
-const product = scrape('32958933105');
 
-product.then(res => {
-  console.log('The JSON: ', res);
-});
+if (process.argv[2]) {
+	const product = scrape(process.argv[2])
+} else {
+	console.error("No url provided")
+}
