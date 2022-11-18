@@ -1,2 +1,2 @@
-const aliexpressProductScraper = require('./src/aliexpressProductScraper');
-module.exports = aliexpressProductScraper;
+import aliexpressProductScraper from "./src/aliexpressProductScraper.js"
+export default aliexpressProductScraper

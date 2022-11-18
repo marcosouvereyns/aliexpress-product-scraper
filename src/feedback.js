@@ -1,6 +1,6 @@
-const fetch = require('node-fetch');
-const cheerio = require('cheerio');
-const faker = require('faker');
+import fetch from "node-fetch"
+import cheerio from "cheerio"
+import faker from "faker"
 
 const getFeedbackData = feedbackHtml => {
 	const $ = cheerio.load(feedbackHtml);

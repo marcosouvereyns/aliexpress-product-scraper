@@ -1,64 +1,77 @@
-const puppeteer = require('puppeteer');
-const cheerio = require('cheerio');
+import puppeteer from "puppeteer"
+import cheerio from "cheerio"
+import { formatData } from "./formatData.js";
 
-const Variants = require('./variants');
-const Feedback = require('./feedback');
+async function redirectToEnglishProductPage({ page, logger }) {
+	const waitFor = 25
+	logger.log(new Date().toISOString(), "Is english url, switching language to english")
 
-async function scrapeProduct(browser, productUrl) {
+	logger.debug(new Date().toISOString(), "Waiting for #switcher-info")
+	await page.waitForSelector("#switcher-info", { visible: true })
+	logger.debug(new Date().toISOString(), "Clicking #switcher-info")
+	await page.click("#switcher-info")
+
+	await new Promise(r => setTimeout(r, 25))
+	
+	logger.debug(new Date().toISOString(), "Waiting for [data-role='language-input']")
+	await page.waitForSelector("[data-role='language-input']", { visible: true })
+	logger.debug(new Date().toISOString(), "Clicking [data-role='language-input']")
+	await page.click("[data-role='language-input']")
+	
+	await new Promise(r => setTimeout(r, 25))
+	
+	logger.debug(new Date().toISOString(), "Waiting for [data-role='language-list']")
+	await page.waitForSelector("[data-role='language-list']", { visible: true })
+	
+	logger.debug(new Date().toISOString(), "Waiting for [data-locale='en_US'][data-site='glo']")
+	await page.waitForSelector("[data-locale='en_US'][data-site='glo']", { visible: true })
+	logger.debug(new Date().toISOString(), "Clicking [data-locale='en_US'][data-site='glo']")
+	await page.click("[data-locale='en_US'][data-site='glo']")
+	
+	await new Promise(r => setTimeout(r, 25))
+	
+	logger.debug(new Date().toISOString(), "Clicking save language selection button")
+	await page.click(".switcher-btn [data-role=save]")
+
+	logger.debug(new Date().toISOString(), "Awaiting navigation to english product page")
+	await page.waitForNavigation({ waitUntil: "load" })
+}
+
+async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 	const isEnglishUrl = new URL(productUrl).hostname === "www.aliexpress.com"
 	// const FEEDBACK_LIMIT = feedbackLimit || 10;
 	
-	console.log(new Date().toISOString(), "Opening New Page")
-	const page = await browser.newPage();
+	logger.debug(new Date().toISOString(), "Opening New Page")
+	const page = await browser.newPage()
 
-	console.log(new Date().toISOString(), "Setting Viewport and user agent")
+	logger.debug(new Date().toISOString(), "Setting Viewport and user agent and default timeout")
 	await page.setViewport({ width: 1920, height: 1080 })
 	await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
-	
-	console.log(new Date().toISOString(), "Setting request interception")
+	await page.setDefaultTimeout(defaultTimeout)
+
+	logger.debug(new Date().toISOString(), "Setting request interception and listeners")
 	await page.setRequestInterception(true)
+	
 	page.on("request", req => {
-		if (["image", "font", "stylesheet"].includes(req.resourceType())) {
+		if (["image", "font"].includes(req.resourceType())) {
 			req.abort()
-		}
-		else {
+		} else {
 			req.continue()
 		}
 	})
 
 	/** Scrape the aliexpress product page for details */
-	console.log(new Date().toISOString(), "Going to url")
+	logger.debug(new Date().toISOString(), "Going to url")
 	await page.goto(productUrl, { waitUntil: "load" });
 
 	if (isEnglishUrl) {
-		console.log(new Date().toISOString(), "Is english url")
-
-		console.log(new Date().toISOString(), "Waiting for #switcher-info and clicking")
-		await page.waitForSelector("#switcher-info")
-		await page.click("#switcher-info")
-
-		console.log(new Date().toISOString(), "Waiting for [data-role='language-input'] and clicking")
-		await page.waitForSelector("[data-role='language-input']")
-		await page.click("[data-role='language-input']")
-
-		console.log(new Date().toISOString(), "Waiting for [data-role='language-list']")
-		await page.waitForSelector("[data-role='language-list']")
-
-		console.log(new Date().toISOString(), "Waiting for [data-locale='en_US'][data-site='glo'] and clicking")
-		await page.waitForSelector("[data-locale='en_US'][data-site='glo']")
-		await page.click("[data-locale='en_US'][data-site='glo']")
-
-		console.log(new Date().toISOString(), "Clicking save language selection button")
-		await page.click(".switcher-btn [data-role=save]")
-
-		console.log(new Date().toISOString(), "Awaiting navigation to english product page")
-		await page.waitForNavigation({ waitUntil: "load" })
+		await redirectToEnglishProductPage({page, logger})
 	}
 
 	const aliExpressData = await page.evaluate(() => runParams);
 
 	const data = aliExpressData.data;
-	console.log(`${new Date().toISOString()} data.webEnv.host`, data.webEnv.host)
+	logger.debug(`${new Date().toISOString()} data.webEnv.host`, data.webEnv.host)
 
 	/** Scrape the description page for the product using the description url */
 	const descriptionUrl = data.descriptionModule.descriptionUrl;
@@ -86,76 +99,34 @@ async function scrapeProduct(browser, productUrl) {
 	await browser.close();
 
 	/** Build the JSON response with aliexpress product details */
-	const json = {
-		title: data.titleModule.subject,
-		categoryId: data.actionModule.categoryId,
-		productId: data.actionModule.productId,
-		totalAvailableQuantity: data.quantityModule.totalAvailQuantity,
-		description: descriptionData,
-		orders: data.titleModule.tradeCount,
-		storeInfo: {
-			name: data.storeModule.storeName,
-			companyId: data.storeModule.companyId,
-			storeNumber: data.storeModule.storeNum,
-			followers: data.storeModule.followingNumber,
-			ratingCount: data.storeModule.positiveNum,
-			rating: data.storeModule.positiveRate
-		},
-		ratings: {
-			totalStar: 5,
-			averageStar: data.titleModule.feedbackRating.averageStar,
-			totalStartCount: data.titleModule.feedbackRating.totalValidNum,
-			fiveStarCount: data.titleModule.feedbackRating.fiveStarNum,
-			fourStarCount: data.titleModule.feedbackRating.fourStarNum,
-			threeStarCount: data.titleModule.feedbackRating.threeStarNum,
-			twoStarCount: data.titleModule.feedbackRating.twoStarNum,
-			oneStarCount: data.titleModule.feedbackRating.oneStarNum
-		},
-		images:
-			(data.imageModule &&
-				data.imageModule.imagePathList) ||
-			[],
-		// feedback: feedbackData,
-		variants: Variants.get(data.skuModule),
-		specs: data.specsModule.props,
-		currency: data.webEnv.currency,
-		originalPrice: {
-			min: data.priceModule.minAmount.value,
-			max: data.priceModule.maxAmount.value
-		},
-		salePrice: {
-			min: data.priceModule.minActivityAmount
-				? data.priceModule.minActivityAmount.value
-				: data.priceModule.minAmount.value,
-			max: data.priceModule.maxActivityAmount
-				? data.priceModule.maxActivityAmount.value
-				: data.priceModule.maxAmount.value,
-		}
-	};
+	const json = formatData({ data, descriptionData })
 
 	return json;
 }
 
-async function AliexpressProductScraper(productUrl, feedbackLimit) {
+export default async function AliexpressProductScraper({ productUrl, logger, defaultTimeout }, tryN = 1) {
 	let browser = null
 	let json = null
 
 	try {
-		console.log(new Date().toISOString(), "Launching browser")
-		browser = await puppeteer.launch();
-		console.time(`${productUrl} Scraped`)
-		json = await scrapeProduct(browser, productUrl)
-		console.timeEnd(`${productUrl} Scraped`)
-		console.log("Product title", json.title)
+		logger.log(`Scraping ${productUrl}`)
+		logger.debug(new Date().toISOString(), "Launching browser")
+		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 } })
+		
+		const timeBefore = new Date()
+		json = await scrapeProduct({ browser, productUrl, logger, defaultTimeout })
+		const timeAfter = new Date()
+
+		logger.log(`Scraped after ${(timeAfter - timeBefore) / 1000}s`)
+		logger.debug("Product title", json.title)
+		await browser.close()
 	} catch (error) {
-		console.error("AliexpressProductScraper Catched error", error)
+		logger.error("AliexpressProductScraper Catched error", error)
 		if (browser?.close) {
-			console.log("Closing browser after exception")
+			logger.log("Closing browser after exception")
 			await browser.close()
 		}
 	}
 	
 	return json
 }
-
-module.exports = AliexpressProductScraper;

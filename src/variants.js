@@ -1,4 +1,4 @@
-module.exports = {
+export default {
 	get: function (skuModule) {
 		const priceLists = skuModule.skuPriceList || [];
 		const optionsLists = skuModule.productSKUPropertyList || [];
