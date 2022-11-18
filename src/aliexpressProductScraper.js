@@ -60,6 +60,15 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 		}
 	})
 
+	page.on('response', response => {
+		const status = response.status()
+		const responseUrl = response.url()
+		const isAliexpress = new URL(responseUrl).hostname.includes("aliexpress.com")
+		if ((status >= 300) && (status <= 399) && isAliexpress) {
+			logger.log(`${new Date().toISOString()} Redirect from ${responseUrl} to ${response.headers()['location']}`)
+		}
+	})
+
 	/** Scrape the aliexpress product page for details */
 	logger.debug(new Date().toISOString(), "Going to url")
 	await page.goto(productUrl, { waitUntil: "load" });
