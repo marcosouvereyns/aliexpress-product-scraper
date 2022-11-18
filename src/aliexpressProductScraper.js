@@ -2,6 +2,14 @@ import puppeteer from "puppeteer"
 import cheerio from "cheerio"
 import { formatData } from "./formatData.js";
 
+export const defaultLogger = {
+	error: console.error,
+	warn: console.warn,
+	info: console.info,
+	log: console.log,
+	debug: console.debug
+}
+
 async function redirectToEnglishProductPage({ page, logger }) {
 	const waitFor = 25
 	logger.log(new Date().toISOString(), "Is english url, switching language to english")
@@ -113,7 +121,7 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 	return json;
 }
 
-export default async function AliexpressProductScraper({ productUrl, logger, defaultTimeout }, tryN = 1) {
+export default async function AliexpressProductScraper({ productUrl, logger = defaultLogger, defaultTimeout }, tryN = 1) {
 	let browser = null
 	let json = null
 
