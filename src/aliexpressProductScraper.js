@@ -126,6 +126,11 @@ export default async function AliexpressProductScraper({ productUrl, logger, def
 			logger.log("Closing browser after exception")
 			await browser.close()
 		}
+
+		if (tryN < 3) {
+			logger.log(`Retrying to scrape ${productUrl}. Try number ${tryN + 1}`)
+			AliexpressProductScraper({ productUrl, logger, defaultTimeout }, tryN + 1)
+		}
 	}
 	
 	return json
