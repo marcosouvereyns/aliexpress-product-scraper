@@ -1,7 +1,7 @@
 import variants from "./variants.js";
 
 export const formatData = ({ data, descriptionData }) => ({
-	title: data.titleModule.subject,
+	title: data.titleModule.subject.replace(/&lt;/g , "<").replace(/&gt;/g , ">").replace(/&quot;/g , "\"").replace(/&#39;/g , "\'").replace(/&amp;/g , "&"),
 	categoryId: data.actionModule.categoryId,
 	productId: data.actionModule.productId,
 	totalAvailableQuantity: data.quantityModule.totalAvailQuantity,
