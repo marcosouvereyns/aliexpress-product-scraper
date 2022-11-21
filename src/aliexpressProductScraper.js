@@ -45,7 +45,7 @@ async function redirectToEnglishProductPage({ page, logger }) {
 	await page.waitForNavigation({ waitUntil: "load" })
 }
 
-async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
+async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue }) {
 	const isEnglishUrl = new URL(productUrl).hostname === "www.aliexpress.com"
 	// const FEEDBACK_LIMIT = feedbackLimit || 10;
 	
@@ -56,6 +56,13 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 	await page.setViewport({ width: 1920, height: 1080 })
 	await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36');
 	await page.setDefaultTimeout(defaultTimeout)
+	
+	if (loginCookieValue) {
+		logger.debug(new Date().toISOString(), "Setting auth cookie for correct discounted prices")
+		await page.setCookie({name: "xman_f", domain: ".aliexpress.com", value: loginCookieValue})
+	} else {
+		logger.warn(new Date().toISOString(), "No loginCookieValue found")
+	}
 
 	logger.debug(new Date().toISOString(), "Setting request interception and listeners")
 	await page.setRequestInterception(true)
@@ -77,6 +84,7 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 		}
 	})
 
+
 	/** Scrape the aliexpress product page for details */
 	logger.debug(new Date().toISOString(), "Going to url")
 	await page.goto(productUrl, { waitUntil: "load" });
@@ -85,6 +93,7 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 		await redirectToEnglishProductPage({page, logger})
 	}
 
+	await new Promise(r => setTimeout(r, 25))
 	const aliExpressData = await page.evaluate(() => runParams);
 
 	const data = aliExpressData.data;
@@ -121,7 +130,7 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout }) {
 	return json;
 }
 
-export default async function AliexpressProductScraper({ productUrl, logger = defaultLogger, defaultTimeout }, tryN = 1) {
+export default async function AliexpressProductScraper({ productUrl, logger = defaultLogger, defaultTimeout, loginCookieValue = "" }, tryN = 1) {
 	let browser = null
 	let json = null
 
@@ -129,9 +138,9 @@ export default async function AliexpressProductScraper({ productUrl, logger = de
 		logger.log(`Scraping ${productUrl}`)
 		logger.debug(new Date().toISOString(), "Launching browser")
 		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 } })
-		
+
 		const timeBefore = new Date()
-		json = await scrapeProduct({ browser, productUrl, logger, defaultTimeout })
+		json = await scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue })
 		const timeAfter = new Date()
 
 		logger.log(`Scraped after ${(timeAfter - timeBefore) / 1000}s`)
