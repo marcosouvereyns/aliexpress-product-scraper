@@ -20,6 +20,7 @@ export default {
 
 		const lists = priceLists.map(list => {
 			return {
+				skuIdStr: list.skuIdStr,
 				skuId: list.skuId,
 				optionValueIds: list.skuPropIds,
 				availableQuantity: list.skuVal.availQuantity,
