@@ -46,7 +46,7 @@ async function redirectToEnglishProductPage({ page, logger }) {
 }
 
 async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue }) {
-	const isEnglishUrl = new URL(productUrl).hostname === "www.aliexpress.com"
+	const isEnglishUrl = new URL(productUrl).hostname === "www.aliexpress.com" || new URL(productUrl).hostname === "www.aliexpress.us"
 	// const FEEDBACK_LIMIT = feedbackLimit || 10;
 	
 	logger.debug(new Date().toISOString(), "Opening New Page")
@@ -78,7 +78,7 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, logi
 	page.on('response', response => {
 		const status = response.status()
 		const responseUrl = response.url()
-		const isAliexpress = new URL(responseUrl).hostname.includes("aliexpress.com")
+		const isAliexpress = new URL(responseUrl).hostname.includes("aliexpress.com") || new URL(responseUrl).hostname.includes("aliexpress.us")
 		if ((status >= 300) && (status <= 399) && isAliexpress) {
 			logger.log(`${new Date().toISOString()} Redirect from ${responseUrl} to ${response.headers()['location']}`)
 		}
@@ -137,7 +137,7 @@ export default async function AliexpressProductScraper({ productUrl, logger = de
 	try {
 		logger.log(`Scraping ${productUrl}`)
 		logger.debug(new Date().toISOString(), "Launching browser")
-		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 } })
+		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 }, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
 
 		const timeBefore = new Date()
 		json = await scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue })
