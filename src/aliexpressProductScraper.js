@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer"
 import cheerio from "cheerio"
 import { formatData } from "./formatData.js";
+import { getLocale } from "./localeMap.js";
 
 export const defaultLogger = {
 	error: console.error,
@@ -10,45 +11,9 @@ export const defaultLogger = {
 	debug: console.debug
 }
 
-async function redirectToEnglishProductPage({ page, logger }) {
-	const waitFor = 25
-	logger.log(new Date().toISOString(), "Is english url, switching language to english")
 
-	logger.debug(new Date().toISOString(), "Waiting for #switcher-info")
-	await page.waitForSelector("#switcher-info", { visible: true })
-	logger.debug(new Date().toISOString(), "Clicking #switcher-info")
-	await page.click("#switcher-info")
 
-	await new Promise(r => setTimeout(r, 25))
-	
-	logger.debug(new Date().toISOString(), "Waiting for [data-role='language-input']")
-	await page.waitForSelector("[data-role='language-input']", { visible: true })
-	logger.debug(new Date().toISOString(), "Clicking [data-role='language-input']")
-	await page.click("[data-role='language-input']")
-	
-	await new Promise(r => setTimeout(r, 25))
-	
-	logger.debug(new Date().toISOString(), "Waiting for [data-role='language-list']")
-	await page.waitForSelector("[data-role='language-list']", { visible: true })
-	
-	logger.debug(new Date().toISOString(), "Waiting for [data-locale='en_US'][data-site='glo']")
-	await page.waitForSelector("[data-locale='en_US'][data-site='glo']", { visible: true })
-	logger.debug(new Date().toISOString(), "Clicking [data-locale='en_US'][data-site='glo']")
-	await page.click("[data-locale='en_US'][data-site='glo']")
-	
-	await new Promise(r => setTimeout(r, 25))
-	
-	logger.debug(new Date().toISOString(), "Clicking save language selection button")
-	await page.click(".switcher-btn [data-role=save]")
-
-	logger.debug(new Date().toISOString(), "Awaiting navigation to english product page")
-	await page.waitForNavigation({ waitUntil: "load" })
-}
-
-async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue }) {
-	const isEnglishUrl = new URL(productUrl).hostname === "www.aliexpress.com" || new URL(productUrl).hostname === "www.aliexpress.us"
-	// const FEEDBACK_LIMIT = feedbackLimit || 10;
-	
+async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue }) {	
 	logger.debug(new Date().toISOString(), "Opening New Page")
 	const page = await browser.newPage()
 
@@ -84,20 +49,21 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, logi
 		}
 	})
 
+	const { locale, site } = getLocale(new URL(productUrl).hostname)
+	logger.debug(new Date().toISOString(), "Setting locale cookie aep_usuc_f", { locale, site })
+	await page.setCookie({name: "aep_usuc_f", domain: ".aliexpress.com", value: `site=${site}&region=ESP&ups_d=0|0|0|0&b_locale=${locale}&isb=y&ups_u_t=&c_tp=USD&x_alimid=2566327732&ae_u_p_s=1`})
 
-	/** Scrape the aliexpress product page for details */
-	logger.debug(new Date().toISOString(), "Going to url")
-	await page.goto(productUrl, { waitUntil: "load" });
+	const validUrl =
+		productUrl.includes("aliexpress.ru") ?
+			productUrl.replace("aliexpress.ru", "www.aliexpress.com")
+		: productUrl
+	logger.debug(new Date().toISOString(), "Going to url", validUrl)
+	await page.goto(validUrl, { waitUntil: "load" });
 
-	if (isEnglishUrl) {
-		await redirectToEnglishProductPage({page, logger})
-	}
-
-	await new Promise(r => setTimeout(r, 25))
-	const aliExpressData = await page.evaluate(() => runParams);
+	const aliExpressData = await page.evaluate(() => window.runParams);
 
 	const data = aliExpressData.data;
-	logger.debug(`${new Date().toISOString()} data.webEnv.host`, data.webEnv.host)
+	logger.debug(`${new Date().toISOString()} data.webEnv.host`, data?.webEnv?.host)
 
 	/** Scrape the description page for the product using the description url */
 	const descriptionUrl = data.descriptionModule.descriptionUrl;
@@ -108,23 +74,8 @@ async function scrapeProduct({ browser, productUrl, logger, defaultTimeout, logi
 	const $ = cheerio.load(descriptionPageHtml);
 	const descriptionData = $('body').html();
 
-	/** Fetch the adminAccountId required to fetch the feedbacks */
-	// const adminAccountId = await page.evaluate(() => adminAccountId);
-
-	// let feedbackData = [];
-
-	// if (data.titleModule.feedbackRating.totalValidNum > 0) {
-	// 	feedbackData = await Feedback.get(
-	// 		data.actionModule.productId,
-	// 		adminAccountId,
-	// 		data.titleModule.feedbackRating.totalValidNum,
-	// 		FEEDBACK_LIMIT
-	// 	);
-	// }
-
 	await browser.close();
 
-	/** Build the JSON response with aliexpress product details */
 	const json = formatData({ data, descriptionData })
 
 	return json;
@@ -137,7 +88,7 @@ export default async function AliexpressProductScraper({ productUrl, logger = de
 	try {
 		logger.log(`Scraping ${productUrl}`)
 		logger.debug(new Date().toISOString(), "Launching browser")
-		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 }, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
+		browser = await puppeteer.launch({ defaultViewport: { width: 1920, height: 1080 }, args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080'] })
 
 		const timeBefore = new Date()
 		json = await scrapeProduct({ browser, productUrl, logger, defaultTimeout, loginCookieValue })
